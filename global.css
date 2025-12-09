@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Variáveis CSS para o NativeWind se comportar como Shadcn */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    /* Adicione as outras variáveis do seu globals.css aqui se necessário */
+  }
+}
