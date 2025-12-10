@@ -1,84 +1,76 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  Bookmark,
-  Check,
-  ChefHat,
-  ChevronRight,
-  Clock,
-  Film,
-  Flame,
-  Gauge, // <--- Adicionado
-  Home,
-  Loader2,
-  LogOut,
-  LucideIcon,
-  Moon,
-  PlayCircle,
-  Quote,
-  Sparkles, // <--- Adicionado
-  Sun,
-  User,
-  Users,
-  Utensils
-} from 'lucide-react-native';
-import { cssInterop } from 'nativewind';
+// components/ui/icons.tsx
 
-function interopIcon(icon: LucideIcon) {
-  cssInterop(icon, {
-    className: {
-      target: 'style',
-      nativeStyleToProp: {
-        color: true,
-        opacity: true,
-      },
-    },
-  });
+import { cn } from "@/lib/utils";
+import React from "react";
+import { Path, Svg, SvgProps } from "react-native-svg";
+
+export interface IconProps extends SvgProps {
+  className?: string;
 }
 
-// Registrar ícones para uso com classes Tailwind
-interopIcon(Utensils);
-interopIcon(User);
-interopIcon(Home);
-interopIcon(ChevronRight);
-interopIcon(ArrowRight);
-interopIcon(ArrowLeft);
-interopIcon(ChefHat);
-interopIcon(LogOut);
-interopIcon(Moon);
-interopIcon(Sun);
-interopIcon(Clock);
-interopIcon(Users);
-interopIcon(Flame);
-interopIcon(Bookmark);
-interopIcon(Check);
-interopIcon(Quote);
-interopIcon(Film);
-interopIcon(PlayCircle);
-interopIcon(Loader2);
-interopIcon(Sparkles); // <--- Registado
-interopIcon(Gauge);    // <--- Registado
+// -----------------------------------------------------------
+// Ícone de Chef (Já existia no projeto)
+// -----------------------------------------------------------
+export function ChefHat({ className, ...props }: IconProps) {
+  return (
+    <Svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("text-current", className)}
+      {...props}
+    >
+      <Path d="M12 11h9a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1M5 11v11M1 17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2M15.5 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zM6.5 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zM12 2v2M12 11V4" />
+    </Svg>
+  );
+}
 
-export {
-  ArrowLeft,
-  ArrowRight,
-  Bookmark,
-  Check,
-  ChefHat,
-  ChevronRight,
-  Clock,
-  Film,
-  Flame,
-  Gauge, // <--- Exportado
-  Home,
-  Loader2,
-  LogOut,
-  Moon,
-  PlayCircle,
-  Quote,
-  Sparkles, // <--- Exportado
-  Sun,
-  User,
-  Users,
-  Utensils
-};
+// -----------------------------------------------------------
+// Ícone de Olho Aberto (Eye) - Para mostrar a senha
+// -----------------------------------------------------------
+export function Eye({ className, ...props }: IconProps) {
+  return (
+    <Svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("text-current", className)}
+      {...props}
+    >
+      <Path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <Path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+    </Svg>
+  );
+}
+
+// -----------------------------------------------------------
+// Ícone de Olho Fechado (EyeOff) - Para esconder a senha
+// -----------------------------------------------------------
+export function EyeOff({ className, ...props }: IconProps) {
+  return (
+    <Svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("text-current", className)}
+      {...props}
+    >
+      <Path d="M9.88 9.88a3 3 0 1 0 4.24 4.24M10.6 6.6A10 10 0 0 1 22 12c-.58 1.48-1.74 2.85-3.3 3.84m-4.5 2.2a10 10 0 0 1-9.9-7.04c.58-1.48 1.74-2.85 3.3-3.84m.5-1.01a1 1 0 0 0-1.76-1L2 2" />
+      <Path d="M2 2l20 20" />
+    </Svg>
+  );
+}
+
+// -----------------------------------------------------------
+// Adicione outros ícones do projeto aqui (ex: Home, Settings, etc.)
+// -----------------------------------------------------------
+// export function Home(...) { ... }

@@ -1,13 +1,24 @@
+// app/(auth)/login.tsx
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from 'expo-router';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Alert, Text, View } from 'react-native'; // Adicione Image se quiser logo
+import {
+  Alert,
+  Keyboard, // Importado para ajudar aDismissOnTap
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
-import { ChefHat } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
+import { Logo } from '@/components/ui/logo';
 import { useAuthStore } from '@/stores/useAuthStore';
 
 const loginSchema = z.object({
@@ -28,80 +39,96 @@ export default function LoginScreen() {
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
+    Keyboard.dismiss(); // Esconde o teclado ao submeter
     try {
       await signIn(data.email, data.password);
     } catch (error: any) {
-      Alert.alert("Erro", error.message || "Falha ao entrar");
+      Alert.alert("Acesso Negado", error.message || "Verifique suas credenciais");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View className="flex-1 bg-deep-900 justify-center p-8">
-      
-      {/* Cabeçalho */}
-      <View className="items-center mb-12">
-        <View className="bg-deep-800 p-4 rounded-full mb-4 border border-gold-500/20">
-          <ChefHat className="text-gold-500 w-16 h-16" />
-        </View>
-        <Text className="text-3xl font-display text-gold-500 tracking-wider">
-          LUMIÈRE
-        </Text>
-        <Text className="text-stone-400 font-serif italic mt-2">
-          Sua cozinha, elevada.
-        </Text>
-      </View>
+    <View className="flex-1 bg-deep-900">
+      <SafeAreaView className="flex-1">
+        {/* KeyboardAvoidingView: Ajusta a tela quando o teclado sobe */}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : -200} // Ajuste fino para Android
+        >
+          {/* ScrollView: Permite a rolagem para evitar que o conteúdo fique coberto */}
+          <ScrollView 
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+            className="p-8"
+            keyboardShouldPersistTaps="handled"
+            scrollEnabled={true} // Garante que a rolagem funcione se o teclado aparecer
+          >
+            
+            {/* Logo */}
+            <View className="mb-16">
+              <Logo variant="full" size={80} />
+            </View>
 
-      {/* Formulário */}
-      <View className="gap-6">
-        <Controller
-          control={control}
-          name="email"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <Input
-              label="Email"
-              placeholder="seu@email.com"
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              error={errors.email?.message}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          )}
-        />
+            {/* Formulário */}
+            <View className="gap-6 w-full max-w-md self-center">
+              <Controller
+                control={control}
+                name="email"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Input
+                    label="Email"
+                    placeholder="exemplo@lumiere.com"
+                    onBlur={onBlur}
+                    onChangeText={onChange}
+                    value={value}
+                    error={errors.email?.message}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                )}
+              />
 
-        <Controller
-          control={control}
-          name="password"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <Input
-              label="Senha"
-              placeholder="••••••"
-              secureTextEntry
-              onBlur={onBlur}
-              onChangeText={onChange}
-              value={value}
-              error={errors.password?.message}
-            />
-          )}
-        />
+              <View>
+                <Controller
+                  control={control}
+                  name="password"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <Input
+                      label="Senha"
+                      placeholder="••••••••"
+                      secureTextEntry // ESSENCIAL: Ativa o novo visualizador de senha
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      value={value}
+                      error={errors.password?.message}
+                    />
+                  )}
+                />
+                <View className="items-end mt-2">
+                  <Text className="text-stone-500 text-xs">Esqueceu a senha?</Text>
+                </View>
+              </View>
 
-        <Button 
-          label={loading ? "Entrando..." : "Acessar Atelier"} 
-          onPress={handleSubmit(onSubmit)}
-          disabled={loading}
-          className="mt-4"
-        />
+              <Button 
+                label={loading ? "Autenticando..." : "Entrar no Atelier"} 
+                onPress={handleSubmit(onSubmit)}
+                disabled={loading}
+                className="mt-2"
+              />
 
-        <View className="flex-row justify-center mt-4 gap-1">
-          <Text className="text-stone-500">Ainda não é membro?</Text>
-          <Link href="/(auth)/register" asChild>
-            <Text className="text-gold-500 font-bold">Solicitar acesso</Text>
-          </Link>
-        </View>
-      </View>
+              <View className="flex-row justify-center mt-6 gap-1">
+                <Text className="text-stone-500">Ainda não é membro?</Text>
+                <Link href="/(auth)/register" asChild>
+                  <Text className="text-gold-500 font-bold">Solicitar convite</Text>
+                </Link>
+              </View>
+            </View>
+
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   );
 }

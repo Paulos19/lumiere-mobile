@@ -1,3 +1,4 @@
+// app/(auth)/register.tsx
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -7,15 +8,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
-import { ChefHat } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
+import { Logo } from '@/components/ui/logo'; // Nova Logo
 import { useAuthStore } from '@/stores/useAuthStore';
 
-// Schema de Validação
 const registerSchema = z.object({
-  name: z.string().min(2, "O nome deve ter pelo menos 2 letras"),
+  name: z.string().min(2, "Nome muito curto"),
   email: z.string().email("Email inválido"),
-  password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
+  password: z.string().min(6, "Mínimo 6 caracteres"),
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "As senhas não conferem",
@@ -38,9 +38,8 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await register(data.name, data.email, data.password);
-      // O redirecionamento acontece dentro da store, mas se houver erro cai no catch
     } catch (error: any) {
-      Alert.alert("Erro no Cadastro", error.message || "Tente novamente mais tarde.");
+      Alert.alert("Erro no Cadastro", error.message || "Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -53,24 +52,26 @@ export default function RegisterScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           className="flex-1"
         >
-          <ScrollView className="p-8 flex-grow justify-center">
+          <ScrollView 
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+            className="p-8"
+            keyboardShouldPersistTaps="handled"
+          >
             
-            {/* Header */}
+            {/* Header com Logo - Versão Compacta ou Full dependendo do gosto */}
+            {/* Aqui optei pela Full mas com texto adaptado abaixo */}
             <View className="items-center mb-10">
-              <View className="flex-row items-center gap-2 mb-2">
-                 <ChefHat className="text-gold-500 w-8 h-8" />
-                 <Text className="text-xl font-display text-gold-500">LUMIÈRE</Text>
-              </View>
+              <Logo variant="icon" size={60} className="mb-4" />
               <Text className="text-3xl font-display text-white text-center">
-                Junte-se ao Atelier
+                Junte-se ao <Text className="text-gold-500">Lumière</Text>
               </Text>
-              <Text className="text-stone-400 text-center mt-2">
-                Crie sua conta para experiências gastronômicas exclusivas.
+              <Text className="text-stone-400 text-center mt-2 px-4 leading-relaxed">
+                Crie sua conta para acessar experiências gastronômicas exclusivas.
               </Text>
             </View>
 
             {/* Formulário */}
-            <View className="gap-5">
+            <View className="gap-5 w-full max-w-md self-center">
               
               <Controller
                 control={control}
@@ -145,7 +146,7 @@ export default function RegisterScreen() {
               />
             </View>
 
-            {/* Rodapé - Voltar ao Login */}
+            {/* Rodapé */}
             <View className="flex-row justify-center mt-8 gap-1">
               <Text className="text-stone-500">Já tem convite?</Text>
               <Link href="/(auth)/login" asChild>
