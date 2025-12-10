@@ -8,14 +8,15 @@ import {
   Clock,
   Film,
   Flame,
+  Gauge, // <--- Adicionado
   Home,
-  Loader2 // <--- Adicionado
-  ,
+  Loader2,
   LogOut,
   LucideIcon,
   Moon,
   PlayCircle,
   Quote,
+  Sparkles, // <--- Adicionado
   Sun,
   User,
   Users,
@@ -35,7 +36,7 @@ function interopIcon(icon: LucideIcon) {
   });
 }
 
-// Registrar ícones
+// Registrar ícones para uso com classes Tailwind
 interopIcon(Utensils);
 interopIcon(User);
 interopIcon(Home);
@@ -54,6 +55,30 @@ interopIcon(Check);
 interopIcon(Quote);
 interopIcon(Film);
 interopIcon(PlayCircle);
-interopIcon(Loader2); // <--- Registrar
+interopIcon(Loader2);
+interopIcon(Sparkles); // <--- Registado
+interopIcon(Gauge);    // <--- Registado
 
-export { ArrowLeft, ArrowRight, Bookmark, Check, ChefHat, ChevronRight, Clock, Film, Flame, Home, Loader2, LogOut, Moon, PlayCircle, Quote, Sun, User, Users, Utensils };
+export {
+  ArrowLeft,
+  ArrowRight,
+  Bookmark,
+  Check,
+  ChefHat,
+  ChevronRight,
+  Clock,
+  Film,
+  Flame,
+  Gauge, // <--- Exportado
+  Home,
+  Loader2,
+  LogOut,
+  Moon,
+  PlayCircle,
+  Quote,
+  Sparkles, // <--- Exportado
+  Sun,
+  User,
+  Users,
+  Utensils
+};

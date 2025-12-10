@@ -4,7 +4,6 @@ import { create } from 'zustand';
 
 // ------------------------------------------------------------------
 // CONFIGURAÇÃO DE API
-// Apontando para o seu backend de produção na Vercel
 // ------------------------------------------------------------------
 const API_LOGIN_URL = "https://lumieres-mu.vercel.app/api/mobile/auth/login";
 const API_REGISTER_URL = "https://lumieres-mu.vercel.app/api/mobile/auth/register";
@@ -27,7 +26,7 @@ interface AuthState {
   signIn: (email: string, pass: string) => Promise<void>;
   register: (name: string, email: string, pass: string) => Promise<void>;
   signOut: () => Promise<void>;
-  hydrate: () => Promise<void>; // Verifica se já existe sessão salva ao abrir o app
+  hydrate: () => Promise<void>; 
 }
 
 // ------------------------------------------------------------------
@@ -52,6 +51,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         throw new Error(data.error || 'Falha ao entrar. Verifique suas credenciais.');
       }
 
+      // Verificação de Segurança
+      if (!data.user || !data.user.id) {
+        console.error("[Auth] ERRO CRÍTICO: Backend não retornou ID do usuário.", data);
+      } else {
+        console.log("[Auth] Login realizado. ID:", data.user.id);
+      }
+
       // 1. Salvar sessão segura no dispositivo
       await Storage.setItem('user_session', JSON.stringify(data.user));
       
@@ -63,7 +69,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     } catch (error) {
       console.error("[Auth] Erro no login:", error);
-      throw error; // Repassa o erro para a UI exibir o Alert
+      throw error; 
     }
   },
 
@@ -82,14 +88,11 @@ export const useAuthStore = create<AuthState>((set) => ({
         throw new Error(data.error || 'Falha ao criar conta.');
       }
 
-      // Auto-Login após registro:
-      // 1. Salvar sessão
-      await Storage.setItem('user_session', JSON.stringify(data.user));
-      
-      // 2. Atualizar estado
-      set({ user: data.user });
+      console.log("[Auth] Registro realizado. ID:", data.user?.id);
 
-      // 3. Redirecionar
+      // Auto-Login:
+      await Storage.setItem('user_session', JSON.stringify(data.user));
+      set({ user: data.user });
       router.replace('/(tabs)');
 
     } catch (error) {
@@ -117,11 +120,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       
       if (storedUser) {
         const parsedUser = JSON.parse(storedUser);
+        console.log("[Auth] Sessão restaurada para ID:", parsedUser.id);
         set({ user: parsedUser });
-        // O redirecionamento é feito pelo _layout.tsx baseado na mudança do estado 'user'
+        // O router cuida do redirecionamento ou o _layout mostra a tela correta
+      } else {
+        console.log("[Auth] Nenhuma sessão salva encontrada.");
+        set({ user: null });
       }
     } catch (e) {
-      console.log('[Auth] Sessão não encontrada ou expirada');
+      console.log('[Auth] Erro ao ler sessão:', e);
       set({ user: null });
     } finally {
       set({ isLoading: false });

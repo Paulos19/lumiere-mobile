@@ -1,4 +1,4 @@
-import { ChefHat, User, Utensils } from '@/components/ui/icons'; // Usando nossos ícones
+import { ChefHat, Sparkles, User, Utensils } from '@/components/ui/icons'; // Adicione Sparkles
 import { Tabs } from 'expo-router';
 
 export default function TabLayout() {
@@ -7,14 +7,14 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#0F0F0F', // deep-900
-          borderTopColor: 'rgba(255, 255, 255, 0.1)', // white/10
+          backgroundColor: '#0F0F0F',
+          borderTopColor: 'rgba(255, 255, 255, 0.1)',
           height: 60,
           paddingBottom: 8,
           paddingTop: 8,
         },
-        tabBarActiveTintColor: '#C5A028', // gold-500
-        tabBarInactiveTintColor: '#78716c', // stone-500
+        tabBarActiveTintColor: '#C5A028',
+        tabBarInactiveTintColor: '#78716c',
         tabBarLabelStyle: {
           fontFamily: 'Geist-Regular',
           fontSize: 10,
@@ -31,6 +31,16 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <ChefHat color={color} size={24} />,
         }}
       />
+      
+      {/* ROTA NOVA: DU CHEF (Substituindo Explore) */}
+      <Tabs.Screen
+        name="du-chef"
+        options={{
+          title: 'Du Chef',
+          tabBarIcon: ({ color }) => <Sparkles color={color} size={24} />,
+        }}
+      />
+
       <Tabs.Screen
         name="recipes"
         options={{

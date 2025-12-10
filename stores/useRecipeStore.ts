@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { create } from 'zustand';
 import { useAuthStore } from './useAuthStore';
 
@@ -8,7 +9,7 @@ const API_BASE = "https://lumieres-mu.vercel.app/api/mobile";
 const API_GENERATE_URL = `${API_BASE}/ai/generate`;
 const API_SAVE_URL = `${API_BASE}/recipe/save`;
 const API_LIST_URL = `${API_BASE}/recipe/list`;
-const API_VIDEO_URL = `${API_BASE}/ai/video`; // Rota de geração de vídeo
+const API_VIDEO_URL = `${API_BASE}/ai/video`; 
 
 // ------------------------------------------------------------------
 // TIPAGEM
@@ -27,17 +28,15 @@ export interface Recipe {
   portions?: string;
   category?: string;
   savedAt?: string;
-  
-  // Mapeamento de índice do passo (0, 1, 2...) para URL do vídeo gerado
   stepVideos?: Record<number, string>; 
 }
 
 interface RecipeState {
   currentRecipe: Recipe | null;
   savedRecipes: Recipe[];
-  isGenerating: boolean;     // Loading da receita completa
-  isLoadingList: boolean;    // Loading da lista de receitas salvas
-  generatingStepIndex: number | null; // Qual passo está gerando vídeo agora?
+  isGenerating: boolean;     
+  isLoadingList: boolean;    
+  generatingStepIndex: number | null; 
 
   // Actions
   generateRecipe: (data: any) => Promise<void>;
@@ -62,20 +61,43 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   generateRecipe: async (formData) => {
     set({ isGenerating: true });
     try {
-      const user = useAuthStore.getState().user;
+      // 1. Tenta pegar o usuário da memória RAM
+      let user = useAuthStore.getState().user;
+
+      // [AUTO-RECUPERAÇÃO] 
+      // Se user for nulo na memória, tenta forçar uma leitura do disco
+      if (!user || !user.id) {
+        console.log("[RecipeStore] Usuário não encontrado na RAM. Tentando recuperar do disco...");
+        await useAuthStore.getState().hydrate();
+        // Atualiza a variável local após o hydrate
+        user = useAuthStore.getState().user;
+      }
+
+      // Se AINDA assim for nulo, bloqueia e avisa o usuário
+      if (!user || !user.id) {
+        console.error("[RecipeStore] Falha crítica: ID do usuário não encontrado.");
+        Alert.alert("Sessão Expirada", "Não foi possível identificar seu usuário. Por favor, faça login novamente.");
+        set({ isGenerating: false });
+        return;
+      }
       
+      console.log(`[RecipeStore] Enviando requisição para User ID: ${user.id}`);
+
       const response = await fetch(API_GENERATE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           ...formData, 
-          userId: user?.id, 
-          userName: user?.name, 
+          userId: user.id, // Garante envio do ID recuperado
+          userName: user.name, 
           locale: 'pt' 
         }),
       });
 
-      if (!response.ok) throw new Error(`Erro: ${response.status}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erro: ${response.status}`);
+      }
       
       const data = await response.json();
       
@@ -85,14 +107,14 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
         recipeData.imageUrl = data.imageUrl;
       }
       
-      // Inicializa stepVideos vazio se não vier
       if (!recipeData.stepVideos) {
         recipeData.stepVideos = {};
       }
 
       set({ currentRecipe: recipeData });
-    } catch (error) {
-      console.error("Erro na geração da receita:", error);
+    } catch (error: any) {
+      console.error("[RecipeStore] Erro na geração:", error);
+      Alert.alert("Erro", error.message || "Falha ao gerar receita.");
       throw error;
     } finally {
       set({ isGenerating: false });
@@ -102,7 +124,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   // --- 2. SALVAR / REMOVER (TOGGLE) ---
   toggleSaveCurrentRecipe: async () => {
     const { currentRecipe } = get();
-    const user = useAuthStore.getState().user;
+    const user = useAuthStore.getState().user; // Pode aplicar a mesma lógica de recuperação aqui se desejar
 
     if (!currentRecipe || !user) return false;
 
@@ -115,10 +137,10 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       const data = await response.json();
       
-      // Atualiza a lista de salvos em background para manter consistência
+      // Atualiza a lista de salvos em background
       get().fetchMyRecipes();
       
-      return data.saved; // Retorna true se salvou, false se removeu
+      return data.saved; 
     } catch (error) {
       console.error("Erro ao salvar:", error);
       return false;
@@ -169,10 +191,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       const data = await response.json();
 
-      console.log(`[Store] URL do Vídeo recebida para passo ${index}:`, data.videoUrl);
-
       if (data.videoUrl) {
-        // Atualiza imutavelmente o mapa de vídeos
         const updatedVideos = { 
           ...currentRecipe.stepVideos, 
           [index]: data.videoUrl 
