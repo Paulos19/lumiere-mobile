@@ -63,7 +63,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
   // --- 1. GERAR RECEITA (FLUXO LIVRE: INGREDIENTES) ---
   generateRecipe: async (formData) => {
-    // [IMPORTANTE] Limpa a receita anterior para forçar a tela de Loading
+    // Limpa a receita anterior para forçar a tela de Loading
     set({ currentRecipe: null, isGenerating: true });
     
     try {
@@ -79,17 +79,17 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
       if (!user || !user.id) {
         Alert.alert("Sessão Expirada", "Por favor, faça login novamente.");
         set({ isGenerating: false });
-        return; // Interrompe o fluxo
+        return; 
       }
       
       console.log(`[Store] Iniciando geração livre para: ${user.name}`);
 
-      // 2. Chamada Direta (Mantemos fetch aqui pois o payload é diferente do Du Chef)
+      // 2. Chamada Direta
       const response = await fetch(API_GENERATE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          ...formData, // ingredients, goal, restrictions
+          ...formData, 
           userId: user.id, 
           userName: user.name, 
           locale: 'pt' 
@@ -126,9 +126,9 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
     }
   },
 
-  // --- 2. GERAR RECEITA DU CHEF (FLUXO SUGESTÕES) ---
+  // --- 2. GERAR RECEITA DU CHEF (ATUALIZADO E SEGURO) ---
   generateDuChefRecipe: async (selectedTitle, preferences) => {
-    // [IMPORTANTE] Limpa o estado para garantir que a UI mostre loading
+    // Define estado de loading
     set({ currentRecipe: null, isGenerating: true });
 
     try {
@@ -147,7 +147,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       console.log(`[Store] Gerando prato selecionado: "${selectedTitle}"`);
 
-      // 2. Chama o Service (Centralizado)
+      // 2. Chama o Service
       const data = await recipeService.generateFullDuChefRecipe(selectedTitle, preferences);
 
       // 3. Normalização
@@ -160,15 +160,14 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
       if (data.imageUrl && !recipeData.imageUrl) recipeData.imageUrl = data.imageUrl;
       if (!recipeData.stepVideos) recipeData.stepVideos = {};
 
-      // 4. Atualiza o Estado
-      set({ currentRecipe: recipeData });
+      // 4. Atualiza o Estado com Sucesso
+      set({ currentRecipe: recipeData, isGenerating: false });
 
     } catch (error: any) {
       console.error("[Store] Erro Du Chef:", error);
-      Alert.alert("Erro", "Não foi possível preparar este prato específico.");
-      throw error;
-    } finally {
+      // NÃO usamos Alert aqui. A UI (du-chef.tsx) tratará o erro.
       set({ isGenerating: false });
+      throw error;
     }
   },
 
@@ -188,10 +187,10 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       const data = await response.json();
       
-      // Atualiza a lista de salvos em background para manter consistência
+      // Atualiza a lista em background
       get().fetchMyRecipes();
       
-      return data.saved; // Retorna true se salvou, false se removeu
+      return data.saved; // true = salvou, false = removeu
     } catch (error) {
       console.error("Erro ao salvar:", error);
       return false;
@@ -242,10 +241,9 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       const data = await response.json();
 
-      console.log(`[Store] URL do Vídeo recebida para passo ${index}:`, data.videoUrl ? "OK" : "Vazio");
+      console.log(`[Store] URL do Vídeo passo ${index}:`, data.videoUrl ? "OK" : "Vazio");
 
       if (data.videoUrl) {
-        // Atualiza imutavelmente o mapa de vídeos
         const updatedVideos = { 
           ...currentRecipe.stepVideos, 
           [index]: data.videoUrl 

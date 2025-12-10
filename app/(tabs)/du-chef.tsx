@@ -1,296 +1,298 @@
-import { zodResolver } from '@hookform/resolvers/zod';
+import { ChevronRight, Flame, Sparkles, User, Users } from '@/components/ui/icons'; // Ajuste imports conforme seus ícones
 import { useMutation } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
-import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router'; // CORREÇÃO 1: Router Imperativo
+import React, { useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as z from 'zod';
 
-// Ícones e Componentes
+// Imports de Lógica
 import { DuChefPreferences, recipeService } from '@/app/services/recipeService';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useRecipeStore } from '@/stores/useRecipeStore';
-import { ArrowRight, CheckCircle2, ChefHat, Sparkles, Utensils, Wallet } from 'lucide-react-native';
-
-// --- SCHEMA DE VALIDAÇÃO ---
-const formSchema = z.object({
-  guests: z.string().min(1, "Informe o número").regex(/^\d+$/, "Apenas números"),
-  budget: z.enum(['cheap', 'medium', 'expensive']),
-  restrictions: z.string().optional(),
-  cuisine: z.string().min(3, "Defina um estilo"),
-});
-
-type DuChefFormSchema = z.infer<typeof formSchema>;
 
 export default function DuChefScreen() {
-  const router = useRouter();
-  
-  // STORE ZUSTAND (Para gerar a receita final e limpar o estado antigo)
+  // OBS: Removemos 'const router = useRouter()' para evitar o erro de contexto.
+
+  // --- STORE ACTIONS ---
   const generateDuChefRecipe = useRecipeStore((state) => state.generateDuChefRecipe);
+
+  // --- ESTADOS DO FORMULÁRIO ---
+  const [step, setStep] = useState<1 | 2>(1); // Controle de Passo
+  const [loadingCardIndex, setLoadingCardIndex] = useState<number | null>(null);
+
+  const [mode, setMode] = useState<'individual' | 'group'>('individual');
+  const [guests, setGuests] = useState('2');
+  const [budget, setBudget] = useState<'cheap' | 'medium' | 'expensive'>('medium');
+  const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
+  const [restrictions, setRestrictions] = useState<string[]>([]);
   
-  // ESTADOS LOCAIS
-  const [step, setStep] = useState<1 | 2>(1); // 1 = Form, 2 = Sugestões
-  const [generatingTitle, setGeneratingTitle] = useState<string | null>(null);
-  const [lastPrefs, setLastPrefs] = useState<DuChefPreferences | null>(null);
+  // Opções
+  const cuisines = ['Brasileira', 'Italiana', 'Francesa', 'Japonesa', 'Mediterrânea', 'Vegetariana'];
+  const healthTags = ['Diabetes', 'Hipertensão', 'Sem Glúten', 'Sem Lactose', 'Low Carb', 'Vegano'];
 
-  // REACT HOOK FORM
-  const { control, handleSubmit, setValue, watch, formState: { errors } } = useForm<DuChefFormSchema>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      guests: '2', 
-      budget: 'medium',
-      cuisine: '',
-      restrictions: ''
-    }
-  });
-
-  const selectedBudget = watch('budget');
-
-  // MUTATION: CONSULTA (PASSO 1)
-  const consultMutation = useMutation({
+  // --- REACT QUERY MUTATION (Consultar Chef - Passo 1) ---
+  const mutation = useMutation({
     mutationFn: recipeService.askDuChef,
-    onSuccess: () => {
-      setStep(2);
+    onSuccess: (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStep(2);
     },
-    onError: (error: any) => {
-      Alert.alert("Erro no Chef", error.message || "Não foi possível consultar o chef.");
+    onError: (error) => {
+      Alert.alert("Erro", "O Chef não conseguiu sugerir menus agora.");
     }
   });
 
-  // SUBMIT DO FORMULÁRIO (GERAR SUGESTÕES)
-  const onSubmit = (data: DuChefFormSchema) => {
-    // Conversão manual segura
-    const guestsNumber = parseInt(data.guests, 10) || 1;
-
-    const prefs: DuChefPreferences = {
-      mode: guestsNumber > 1 ? 'group' : 'individual',
-      guests: guestsNumber,
-      budget: data.budget,
-      restrictions: data.restrictions ? data.restrictions.split(',').map(s => s.trim()) : [],
-      cuisine: [data.cuisine],
+  const handleSubmit = () => {
+    const payload: DuChefPreferences = {
+      mode,
+      guests: mode === 'individual' ? 1 : parseInt(guests) || 2,
+      budget,
+      restrictions,
+      cuisine: selectedCuisines.length > 0 ? selectedCuisines : ['Variada'], // Fallback seguro
     };
-    
-    setLastPrefs(prefs);
-    consultMutation.mutate(prefs);
+    mutation.mutate(payload);
   };
 
-  // AÇÃO: SELECIONAR SUGESTÃO E GERAR RECEITA FINAL
-  const handleSelectRecipe = async (suggestion: any) => {
-    if (generatingTitle || !lastPrefs) return;
-    
-    // Feedback visual e tátil
+  // --- HANDLER DE SELEÇÃO (CORREÇÃO 2 e 3) ---
+  const handleSelectRecipe = async (suggestion: any, index: number) => {
+    if (loadingCardIndex !== null) return;
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setGeneratingTitle(suggestion.title);
+    setLoadingCardIndex(index);
+
+    // Reconstrói as preferências para o contexto da IA
+    const contextPrefs = {
+      mode, guests, budget, restrictions, cuisine: selectedCuisines
+    };
 
     try {
-      // 1. CHAMA A STORE (Isso limpa a receita anterior e gerencia o loading global)
-      await generateDuChefRecipe(suggestion.title, lastPrefs);
+      // 1. Gera/Carrega a receita completa na Store
+      await generateDuChefRecipe(suggestion.title, contextPrefs);
 
-      // 2. NAVEGA PARA O RESULTADO
-      router.push('/recipe/result');
+      // 2. Navega sem passar params (a Store já tem os dados)
+      // Delay pequeno para garantir estabilidade visual
+      setTimeout(() => {
+        router.push('/recipe/result');
+        setLoadingCardIndex(null);
+      }, 100);
 
     } catch (error) {
-      console.log("Fluxo cancelado ou erro tratado na store");
-    } finally {
-      // Pequeno delay para evitar flash se o usuário voltar rápido
-      setTimeout(() => setGeneratingTitle(null), 500);
+      Alert.alert("Erro", "Não foi possível preparar esta receita completa.");
+      setLoadingCardIndex(null);
     }
   };
 
-  // --- RENDERIZAÇÃO: PASSO 1 (FORMULÁRIO) ---
-  if (step === 1) {
-    return (
-      <View className="flex-1 bg-deep-900">
-        <SafeAreaView className="flex-1">
-          <ScrollView className="p-6" showsVerticalScrollIndicator={false}>
-            
-            {/* Header */}
-            <View className="items-center mb-8 mt-4">
-              <View className="bg-deep-800 p-4 rounded-full mb-4 border border-gold-500/20 shadow-lg shadow-gold-500/10">
-                <ChefHat className="text-gold-500 w-12 h-12" />
-              </View>
-              <Text className="text-3xl font-display text-gold-500 tracking-wider">Du Chef</Text>
-              <Text className="text-stone-400 text-center font-serif italic mt-2 px-8">
-                "Diga-me a ocasião, e eu desenharei o menu perfeito."
-              </Text>
+  // Toggle helper
+  const toggleSelection = (list: string[], setList: any, item: string) => {
+    if (list.includes(item)) setList(list.filter(i => i !== item));
+    else setList([...list, item]);
+  };
+
+  const handleReset = () => {
+      setStep(1);
+      mutation.reset();
+  };
+
+  return (
+    <SafeAreaView className="flex-1 bg-deep-900" edges={['top']}>
+      <LinearGradient colors={['#1a160e', '#0F0F0F']} className="flex-1">
+        <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+          
+          {/* HEADER */}
+          <View className="px-6 py-8">
+            <View className="flex-row items-center mb-2">
+              <Sparkles color="#C5A028" size={24} />
+              <Text className="text-gold-500 font-bold text-sm tracking-[3px] ml-2 uppercase">Lumiere AI</Text>
             </View>
+            <Text className="text-4xl text-white font-bold">Du Chef</Text>
+            <Text className="text-stone-400 mt-2 leading-relaxed">
+              Crie uma experiência gastronômica única baseada no seu contexto atual.
+            </Text>
+          </View>
 
-            {/* Form */}
-            <View className="gap-6 pb-20">
+          {/* --- PASSO 1: FORMULÁRIO --- */}
+          {step === 1 && (
+            <Animated.View entering={FadeInDown.springify()} className="px-6 space-y-8">
               
-              {/* Cozinha */}
-              <Controller
-                control={control}
-                name="cuisine"
-                render={({ field: { onChange, value } }) => (
-                  <Input 
-                    label="Estilo de Cozinha"
-                    placeholder="Ex: Italiana, Japonesa..."
-                    value={value}
-                    onChangeText={onChange}
-                    error={errors.cuisine?.message}
-                  />
-                )}
-              />
-
-              {/* Convidados */}
-              <Controller
-                control={control}
-                name="guests"
-                render={({ field: { onChange, value } }) => (
-                  <View>
-                    <Text className="text-gold-400 text-xs font-bold uppercase tracking-widest mb-2">Convidados</Text>
-                    <View className="flex-row items-center bg-deep-800 rounded-xl border border-white/10 p-1">
-                      <Utensils size={18} className="text-stone-500 ml-3" />
-                      <Input 
-                        className="bg-transparent border-0 h-10 flex-1 text-white"
-                        placeholder="Número de pessoas"
-                        keyboardType="numeric"
-                        value={value}
-                        onChangeText={onChange}
-                      />
-                    </View>
-                    {errors.guests && <Text className="text-red-500 text-xs mt-1">{errors.guests.message}</Text>}
-                  </View>
-                )}
-              />
-
-              {/* Orçamento */}
+              {/* 1. MODO */}
               <View>
-                <Text className="text-gold-400 text-xs font-bold uppercase tracking-widest mb-3">Orçamento</Text>
-                <View className="flex-row gap-3">
-                  {[
-                    { id: 'cheap', label: 'Econômico', icon: Wallet },
-                    { id: 'medium', label: 'Médio', icon: Wallet },
-                    { id: 'expensive', label: 'Luxo', icon: Sparkles },
-                  ].map((opt) => (
+                <Text className="text-white font-bold mb-4 text-lg">Quem vai comer?</Text>
+                <View className="flex-row gap-4">
+                  <TouchableOpacity 
+                    onPress={() => setMode('individual')}
+                    className={`flex-1 p-4 rounded-2xl border ${mode === 'individual' ? 'bg-gold-500/20 border-gold-500' : 'bg-deep-800 border-white/5'} items-center`}
+                  >
+                    <User color={mode === 'individual' ? '#C5A028' : '#78716c'} />
+                    <Text className={`mt-2 font-bold ${mode === 'individual' ? 'text-gold-500' : 'text-stone-500'}`}>Solo</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={() => setMode('group')}
+                    className={`flex-1 p-4 rounded-2xl border ${mode === 'group' ? 'bg-gold-500/20 border-gold-500' : 'bg-deep-800 border-white/5'} items-center`}
+                  >
+                    <Users color={mode === 'group' ? '#C5A028' : '#78716c'} />
+                    <Text className={`mt-2 font-bold ${mode === 'group' ? 'text-gold-500' : 'text-stone-500'}`}>Acompanhado</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {mode === 'group' && (
+                  <Animated.View entering={FadeInDown} className="mt-4">
+                    <Text className="text-stone-400 text-xs mb-2 uppercase">Quantas Pessoas?</Text>
+                    <TextInput 
+                      value={guests}
+                      onChangeText={setGuests}
+                      keyboardType="number-pad"
+                      className="bg-deep-800 text-white p-4 rounded-xl border border-white/10 font-bold text-lg"
+                    />
+                  </Animated.View>
+                )}
+              </View>
+
+              {/* 2. ORÇAMENTO */}
+              <View>
+                <Text className="text-white font-bold mb-4 text-lg">Orçamento Sugerido</Text>
+                <View className="flex-row bg-deep-800 p-1 rounded-xl border border-white/5">
+                  {(['cheap', 'medium', 'expensive'] as const).map((b) => (
                     <TouchableOpacity
-                      key={opt.id}
-                      onPress={() => setValue('budget', opt.id as any)}
-                      className={`flex-1 items-center justify-center p-3 rounded-xl border transition-all ${
-                        selectedBudget === opt.id 
-                          ? 'bg-gold-500 border-gold-500' 
-                          : 'bg-deep-800 border-white/10'
-                      }`}
+                      key={b}
+                      onPress={() => setBudget(b)}
+                      className={`flex-1 py-3 rounded-lg items-center ${budget === b ? 'bg-gold-500' : 'transparent'}`}
                     >
-                      <opt.icon size={20} className={selectedBudget === opt.id ? 'text-deep-900' : 'text-stone-500'} />
-                      <Text className={`text-xs font-bold mt-1 ${selectedBudget === opt.id ? 'text-deep-900' : 'text-stone-400'}`}>
-                        {opt.label}
+                      <Text className={`font-bold ${budget === b ? 'text-deep-900' : 'text-stone-400'}`}>
+                        {b === 'cheap' ? '$' : b === 'medium' ? '$$' : '$$$'}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
 
-              {/* Restrições */}
-              <Controller
-                control={control}
-                name="restrictions"
-                render={({ field: { onChange, value } }) => (
-                  <Input 
-                    label="Restrições (Opcional)"
-                    placeholder="Ex: Sem glúten, vegano..."
-                    value={value || ''}
-                    onChangeText={onChange}
-                  />
+              {/* 3. SAÚDE */}
+              <View>
+                <Text className="text-white font-bold mb-4 text-lg">Saúde & Restrições</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {healthTags.map((tag) => (
+                    <TouchableOpacity
+                      key={tag}
+                      onPress={() => toggleSelection(restrictions, setRestrictions, tag)}
+                      className={`px-4 py-2 rounded-full border ${restrictions.includes(tag) ? 'bg-red-500/20 border-red-500' : 'bg-deep-800 border-white/5'}`}
+                    >
+                      <Text className={restrictions.includes(tag) ? 'text-red-400' : 'text-stone-400'}>{tag}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* 4. COZINHA */}
+              <View>
+                <Text className="text-white font-bold mb-4 text-lg">Preferência Culinária</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {cuisines.map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      onPress={() => toggleSelection(selectedCuisines, setSelectedCuisines, c)}
+                      className={`px-4 py-2 rounded-full border ${selectedCuisines.includes(c) ? 'bg-gold-500/20 border-gold-500' : 'bg-deep-800 border-white/5'}`}
+                    >
+                      <Text className={selectedCuisines.includes(c) ? 'text-gold-500' : 'text-stone-400'}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* BOTÃO */}
+              <TouchableOpacity
+                onPress={handleSubmit}
+                disabled={mutation.isPending}
+                className="w-full bg-gold-500 py-4 rounded-2xl flex-row justify-center items-center shadow-lg shadow-gold-500/20 mt-4"
+              >
+                {mutation.isPending ? (
+                  <ActivityIndicator color="#0F0F0F" />
+                ) : (
+                  <>
+                    <Sparkles color="#0F0F0F" size={20} />
+                    <Text className="text-deep-900 font-bold ml-2 text-lg uppercase tracking-wider">
+                      Consultar Chef
+                    </Text>
+                  </>
                 )}
-              />
+              </TouchableOpacity>
 
-              <Button 
-                size="lg"
-                label={consultMutation.isPending ? "Consultando Chef..." : "Pedir Sugestões"}
-                onPress={handleSubmit(onSubmit)}
-                disabled={consultMutation.isPending}
-                className="mt-4"
-              />
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </View>
-    );
-  }
+            </Animated.View>
+          )}
 
-  // --- RENDERIZAÇÃO: PASSO 2 (SUGESTÕES) ---
-  return (
-    <View className="flex-1 bg-deep-900">
-      <SafeAreaView className="flex-1">
-        <ScrollView className="p-6" showsVerticalScrollIndicator={false}>
-          
-          <View className="flex-row items-center justify-between mb-6">
-            <TouchableOpacity onPress={() => setStep(1)} className="p-2 bg-deep-800 rounded-full border border-white/10">
-               <ArrowRight className="text-stone-400 rotate-180" size={20} />
-            </TouchableOpacity>
-            <Text className="text-gold-500 font-display text-xl">Sugestões do Chef</Text>
-            <View className="w-10" /> 
-          </View>
+          {/* --- PASSO 2: RESULTADO --- */}
+          {step === 2 && mutation.data && (
+            <Animated.View entering={FadeInRight} className="px-6 pb-20">
+              <TouchableOpacity 
+                onPress={handleReset}
+                className="mb-6 flex-row items-center p-2 -ml-2"
+              >
+                <Text className="text-gold-500 text-sm font-bold">← Nova Consulta</Text>
+              </TouchableOpacity>
 
-          <Text className="text-stone-400 mb-6 italic text-center">
-            "Aqui estão três criações exclusivas para você."
-          </Text>
+              <Text className="text-white font-bold text-2xl mb-2">Sugestões do Chef</Text>
+              <Text className="text-stone-400 italic mb-6">"Aqui estão 3 opções desenhadas para você."</Text>
 
-          <View className="gap-6 pb-12">
-            {consultMutation.data?.map((suggestion: any, index: number) => {
-              const isGeneratingThis = generatingTitle === suggestion.title;
-              
-              return (
-                <TouchableOpacity
-                  key={index}
-                  disabled={!!generatingTitle}
-                  activeOpacity={0.9}
-                  onPress={() => handleSelectRecipe(suggestion)}
-                  className={`bg-deep-800 rounded-2xl overflow-hidden border transition-all ${
-                    isGeneratingThis ? 'border-gold-500 shadow-lg shadow-gold-500/20' : 'border-white/10'
-                  }`}
-                >
-                    {/* Header do Card (View wrapper para segurança do Gradient) */}
-                    <View className="h-32 w-full relative justify-center items-center overflow-hidden">
-                        <LinearGradient
-                          colors={isGeneratingThis ? ['#D4AF37', '#997B1A'] : ['#292524', '#1C1917']}
-                          style={{ position: 'absolute', width: '100%', height: '100%' }}
-                        />
+              {mutation.data.map((recipe: any, index: number) => {
+                  const isLoadingThis = loadingCardIndex === index;
+                  const isBlocked = loadingCardIndex !== null && !isLoadingThis;
+
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      disabled={loadingCardIndex !== null}
+                      onPress={() => handleSelectRecipe(recipe, index)}
+                      className={`mb-6 bg-deep-800 rounded-3xl overflow-hidden border shadow-xl transition-all ${
+                          isLoadingThis ? 'border-gold-500 scale-[1.02]' : 'border-white/10'
+                      } ${isBlocked ? 'opacity-50' : 'opacity-100'}`}
+                    >
+                        {/* Placeholder Visual / Loading */}
+                        <View className="h-40 w-full bg-stone-900 items-center justify-center relative">
+                            {isLoadingThis ? (
+                                <ActivityIndicator size="large" color="#C5A028" />
+                            ) : (
+                                <Flame color="#383434" size={40} />
+                            )}
+                            
+                            {!isLoadingThis && (
+                                <View className="absolute bottom-3 right-3 bg-black/60 px-3 py-1 rounded-full border border-white/10">
+                                    <Text className="text-white text-[10px] uppercase font-bold">Toque para Preparar</Text>
+                                </View>
+                            )}
+                        </View>
                         
-                        {isGeneratingThis ? (
-                          <ActivityIndicator size="large" color="#1C1917" />
-                        ) : (
-                          <ChefHat size={40} className="text-white/20" />
-                        )}
-                        
-                        {/* Badge de Dificuldade */}
-                        {suggestion.difficulty && (
-                          <View className="absolute top-3 right-3 bg-black/40 px-3 py-1 rounded-full border border-white/10">
-                             <Text className="text-white text-[10px] font-bold uppercase tracking-widest">
-                               {suggestion.difficulty}
-                             </Text>
-                          </View>
-                        )}
-                    </View>
-
-                    {/* Conteúdo */}
-                    <View className="p-5">
-                       <Text className={`text-xl font-display mb-2 leading-tight ${isGeneratingThis ? 'text-gold-500' : 'text-white'}`}>
-                         {suggestion.title}
-                       </Text>
-                       <Text className="text-stone-400 text-sm leading-relaxed mb-4">
-                         {suggestion.description}
-                       </Text>
-                       
-                       <View className="flex-row items-center justify-between pt-4 border-t border-white/5">
-                          <Text className="text-stone-500 text-xs font-bold uppercase tracking-widest">Toque para ver a receita</Text>
-                          <CheckCircle2 size={16} className={isGeneratingThis ? "text-gold-500" : "text-stone-600"} />
-                       </View>
-                    </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                        <View className="p-5">
+                            <View className="flex-row justify-between items-start mb-2">
+                                <Text className={`text-xl font-bold flex-1 mr-2 leading-tight ${isLoadingThis ? 'text-gold-500' : 'text-white'}`}>
+                                    {recipe.title}
+                                </Text>
+                                {recipe.difficulty && (
+                                    <View className="bg-gold-500/10 border border-gold-500/20 px-2 py-1 rounded">
+                                        <Text className="text-gold-500 text-[10px] font-bold uppercase">{recipe.difficulty}</Text>
+                                    </View>
+                                )}
+                            </View>
+                            
+                            <Text className="text-stone-400 text-sm leading-relaxed mb-4">
+                                {recipe.description}
+                            </Text>
+                            
+                            <View className="flex-row items-center justify-end border-t border-white/5 pt-4">
+                                <Text className={`text-sm font-bold mr-2 ${isLoadingThis ? 'text-gold-500' : 'text-stone-500'}`}>
+                                    {isLoadingThis ? "Escrevendo Receita..." : "Ver Receita Completa"}
+                                </Text>
+                                <ChevronRight color={isLoadingThis ? "#C5A028" : "#78716c"} size={16} />
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                  );
+              })}
+            </Animated.View>
+          )}
 
         </ScrollView>
-      </SafeAreaView>
-    </View>
+      </LinearGradient>
+    </SafeAreaView>
   );
 }
