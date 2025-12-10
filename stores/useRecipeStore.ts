@@ -1,3 +1,4 @@
+import { recipeService } from '@/app/services/recipeService';
 import { Alert } from 'react-native';
 import { create } from 'zustand';
 import { useAuthStore } from './useAuthStore';
@@ -9,7 +10,7 @@ const API_BASE = "https://lumieres-mu.vercel.app/api/mobile";
 const API_GENERATE_URL = `${API_BASE}/ai/generate`;
 const API_SAVE_URL = `${API_BASE}/recipe/save`;
 const API_LIST_URL = `${API_BASE}/recipe/list`;
-const API_VIDEO_URL = `${API_BASE}/ai/video`; 
+const API_VIDEO_URL = `${API_BASE}/ai/video`;
 
 // ------------------------------------------------------------------
 // TIPAGEM
@@ -28,18 +29,21 @@ export interface Recipe {
   portions?: string;
   category?: string;
   savedAt?: string;
+  
+  // Mapeamento de índice do passo (0, 1, 2...) para URL do vídeo gerado
   stepVideos?: Record<number, string>; 
 }
 
 interface RecipeState {
   currentRecipe: Recipe | null;
   savedRecipes: Recipe[];
-  isGenerating: boolean;     
-  isLoadingList: boolean;    
-  generatingStepIndex: number | null; 
+  isGenerating: boolean;     // Loading da receita completa
+  isLoadingList: boolean;    // Loading da lista de receitas salvas
+  generatingStepIndex: number | null; // Qual passo está gerando vídeo agora?
 
   // Actions
-  generateRecipe: (data: any) => Promise<void>;
+  generateRecipe: (data: any) => Promise<void>; // Fluxo 1: Criação Livre (Ingredientes)
+  generateDuChefRecipe: (selectedTitle: string, preferences: any) => Promise<void>; // Fluxo 2: Sugestões Du Chef
   toggleSaveCurrentRecipe: () => Promise<boolean>;
   fetchMyRecipes: () => Promise<void>;
   generateStepVideo: (index: number, stepText: string) => Promise<void>;
@@ -57,38 +61,36 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   isLoadingList: false,
   generatingStepIndex: null,
 
-  // --- 1. GERAR RECEITA COMPLETA ---
+  // --- 1. GERAR RECEITA (FLUXO LIVRE: INGREDIENTES) ---
   generateRecipe: async (formData) => {
-    set({ isGenerating: true });
+    // [IMPORTANTE] Limpa a receita anterior para forçar a tela de Loading
+    set({ currentRecipe: null, isGenerating: true });
+    
     try {
-      // 1. Tenta pegar o usuário da memória RAM
+      // 1. Recuperação de Sessão (Auth Check)
       let user = useAuthStore.getState().user;
 
-      // [AUTO-RECUPERAÇÃO] 
-      // Se user for nulo na memória, tenta forçar uma leitura do disco
       if (!user || !user.id) {
-        console.log("[RecipeStore] Usuário não encontrado na RAM. Tentando recuperar do disco...");
+        console.log("[Store] Recuperando sessão para Criação Livre...");
         await useAuthStore.getState().hydrate();
-        // Atualiza a variável local após o hydrate
         user = useAuthStore.getState().user;
       }
 
-      // Se AINDA assim for nulo, bloqueia e avisa o usuário
       if (!user || !user.id) {
-        console.error("[RecipeStore] Falha crítica: ID do usuário não encontrado.");
-        Alert.alert("Sessão Expirada", "Não foi possível identificar seu usuário. Por favor, faça login novamente.");
+        Alert.alert("Sessão Expirada", "Por favor, faça login novamente.");
         set({ isGenerating: false });
-        return;
+        return; // Interrompe o fluxo
       }
       
-      console.log(`[RecipeStore] Enviando requisição para User ID: ${user.id}`);
+      console.log(`[Store] Iniciando geração livre para: ${user.name}`);
 
+      // 2. Chamada Direta (Mantemos fetch aqui pois o payload é diferente do Du Chef)
       const response = await fetch(API_GENERATE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          ...formData, 
-          userId: user.id, // Garante envio do ID recuperado
+          ...formData, // ingredients, goal, restrictions
+          userId: user.id, 
           userName: user.name, 
           locale: 'pt' 
         }),
@@ -101,30 +103,79 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
       
       const data = await response.json();
       
-      // Normalização dos dados vindos do N8N/API
+      // 3. Normalização
       const recipeData = data.recipe || data;
+      
+      if (!recipeData.title) throw new Error("Receita incompleta retornada pela IA.");
+
       if (data.imageUrl && !recipeData.imageUrl) {
         recipeData.imageUrl = data.imageUrl;
       }
-      
       if (!recipeData.stepVideos) {
         recipeData.stepVideos = {};
       }
 
       set({ currentRecipe: recipeData });
+
     } catch (error: any) {
-      console.error("[RecipeStore] Erro na geração:", error);
-      Alert.alert("Erro", error.message || "Falha ao gerar receita.");
+      console.error("[Store] Erro GenerateRecipe:", error);
+      Alert.alert("Erro", error.message || "Falha ao criar receita.");
       throw error;
     } finally {
       set({ isGenerating: false });
     }
   },
 
-  // --- 2. SALVAR / REMOVER (TOGGLE) ---
+  // --- 2. GERAR RECEITA DU CHEF (FLUXO SUGESTÕES) ---
+  generateDuChefRecipe: async (selectedTitle, preferences) => {
+    // [IMPORTANTE] Limpa o estado para garantir que a UI mostre loading
+    set({ currentRecipe: null, isGenerating: true });
+
+    try {
+      // 1. Recuperação de Sessão
+      let user = useAuthStore.getState().user;
+      
+      if (!user || !user.id) {
+        console.log("[Store] Recuperando sessão para Du Chef...");
+        await useAuthStore.getState().hydrate();
+        user = useAuthStore.getState().user;
+      }
+
+      if (!user || !user.id) {
+         throw new Error("Usuário não autenticado");
+      }
+
+      console.log(`[Store] Gerando prato selecionado: "${selectedTitle}"`);
+
+      // 2. Chama o Service (Centralizado)
+      const data = await recipeService.generateFullDuChefRecipe(selectedTitle, preferences);
+
+      // 3. Normalização
+      const recipeData = data.recipe || data;
+
+      if (!recipeData.title) {
+         throw new Error("Dados inválidos recebidos do Personal Chef.");
+      }
+
+      if (data.imageUrl && !recipeData.imageUrl) recipeData.imageUrl = data.imageUrl;
+      if (!recipeData.stepVideos) recipeData.stepVideos = {};
+
+      // 4. Atualiza o Estado
+      set({ currentRecipe: recipeData });
+
+    } catch (error: any) {
+      console.error("[Store] Erro Du Chef:", error);
+      Alert.alert("Erro", "Não foi possível preparar este prato específico.");
+      throw error;
+    } finally {
+      set({ isGenerating: false });
+    }
+  },
+
+  // --- 3. SALVAR / REMOVER (TOGGLE) ---
   toggleSaveCurrentRecipe: async () => {
     const { currentRecipe } = get();
-    const user = useAuthStore.getState().user; // Pode aplicar a mesma lógica de recuperação aqui se desejar
+    const user = useAuthStore.getState().user;
 
     if (!currentRecipe || !user) return false;
 
@@ -137,17 +188,17 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       const data = await response.json();
       
-      // Atualiza a lista de salvos em background
+      // Atualiza a lista de salvos em background para manter consistência
       get().fetchMyRecipes();
       
-      return data.saved; 
+      return data.saved; // Retorna true se salvou, false se removeu
     } catch (error) {
       console.error("Erro ao salvar:", error);
       return false;
     }
   },
 
-  // --- 3. LISTAR RECEITAS SALVAS ---
+  // --- 4. LISTAR RECEITAS SALVAS ---
   fetchMyRecipes: async () => {
     const user = useAuthStore.getState().user;
     if (!user) return;
@@ -166,7 +217,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
     }
   },
 
-  // --- 4. GERAR VÍDEO DO PASSO ---
+  // --- 5. GERAR VÍDEO DO PASSO ---
   generateStepVideo: async (index, stepText) => {
     const { currentRecipe } = get();
     const user = useAuthStore.getState().user;
@@ -191,7 +242,10 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       const data = await response.json();
 
+      console.log(`[Store] URL do Vídeo recebida para passo ${index}:`, data.videoUrl ? "OK" : "Vazio");
+
       if (data.videoUrl) {
+        // Atualiza imutavelmente o mapa de vídeos
         const updatedVideos = { 
           ...currentRecipe.stepVideos, 
           [index]: data.videoUrl 

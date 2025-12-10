@@ -34,7 +34,7 @@ export interface DuChefPreferences {
 }
 
 // ============================================================================
-// FUNÇÕES REAIS (API)
+// FUNÇÕES REAIS (API) - EXPORTADAS INDIVIDUALMENTE (Para index.tsx)
 // ============================================================================
 
 // 1. Minhas Receitas (Home)
@@ -93,7 +93,6 @@ export const generateFullDuChefRecipe = async (selectedTitle: string, originalPr
     
     console.log("[Service] Gerando receita para User ID:", user.id);
 
-    // Aumente o timeout do fetch se possível, mas o Vercel tem limite fixo
     const response = await fetch(`${API_BASE_URL}/ai/generate`, {
       method: 'POST',
       headers: { 
@@ -108,26 +107,21 @@ export const generateFullDuChefRecipe = async (selectedTitle: string, originalPr
       }),
     });
 
-    // --- CORREÇÃO DE DEBUG ---
-    // Lemos o texto bruto primeiro para ver se é um erro HTML (Timeout) ou vazio
+    // Tratamento de resposta robusto (HTML Error / Empty Body)
     const textResponse = await response.text();
     
-    console.log("[Service] Resposta Bruta (primeiros 100 chars):", textResponse.substring(0, 100));
-
     if (!textResponse) {
-       throw new Error("O servidor retornou uma resposta vazia (Provável Timeout ou Limite de Tamanho).");
+       throw new Error("O servidor retornou uma resposta vazia.");
     }
 
-    // Tenta parsear o JSON manualmente
     let data;
     try {
         data = JSON.parse(textResponse);
     } catch (e) {
-        // Se falhar, verifica se é erro de HTML (comum no Vercel 504/500)
         if (textResponse.includes("<!DOCTYPE html>")) {
             throw new Error("Erro no Servidor (Timeout ou 500). Tente novamente.");
         }
-        throw new Error("Resposta inválida do servidor: " + e);
+        throw new Error("Resposta inválida do servidor.");
     }
 
     if (!response.ok) {
@@ -143,7 +137,7 @@ export const generateFullDuChefRecipe = async (selectedTitle: string, originalPr
 };
 
 // ============================================================================
-// MOCKS (HOME PAGE)
+// MOCKS (HOME PAGE) - EXPORTADOS INDIVIDUALMENTE
 // ============================================================================
 
 export const fetchCommunityRecipesMock = async (): Promise<RecipeSummary[]> => {
@@ -185,4 +179,15 @@ export const fetchChefTipsMock = async (): Promise<ChefTip[]> => {
     { id: 'tip2', title: 'Selar Carnes', content: 'A frigideira deve estar fumegando para a crosta perfeita.', icon: 'Flame' },
     { id: 'tip3', title: 'Descanso', content: 'Deixe carnes descansarem 5 min após assar.', icon: 'Clock' },
   ];
+};
+
+// ============================================================================
+// EXPORTAÇÃO UNIFICADA (OBJETO) - (Para du-chef.tsx e Stores)
+// ============================================================================
+export const recipeService = {
+  fetchMyRecipes,
+  askDuChef,
+  generateFullDuChefRecipe,
+  fetchCommunityRecipesMock,
+  fetchChefTipsMock
 };
